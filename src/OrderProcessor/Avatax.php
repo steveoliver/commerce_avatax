@@ -59,14 +59,14 @@ class Avatax implements OrderProcessorInterface {
     }
 
     $request_body = [
-      'type' => 'SalesOrder',
-      'companyCode' => $company_code,
-      'date' => $this->dateFormatter->format(REQUEST_TIME, 'custom', 'c'),
-      'code' => 'DC-' . $order->id(),
-      'customerCode' => $order->getEmail(),
-      'currencyCode' => $order->getTotalPrice()->getCurrencyCode(),
-      'addresses' => [],
-      'lines' => []
+      'DocType' => 'SalesInvoice',
+      'CompanyCode' => $company_code,
+      'DocDate' => $this->dateFormatter->format(REQUEST_TIME, 'custom', 'Y-m-d'),
+      'DocCode' => 'DC-' . $order->id(),
+      'CustomerCode' => $order->getEmail(),
+      'CurrencyCode' => $order->getTotalPrice()->getCurrencyCode(),
+      'Addresses' => [],
+      'Lines' => []
     ];
 
     $addresses = [];
@@ -74,13 +74,14 @@ class Avatax implements OrderProcessorInterface {
       /** @var \Drupal\address\Plugin\Field\FieldType\AddressItem $address */
       $address = $order->getBillingProfile()->get('address')->first();
       $addresses = [
-        'singleLocation' => [
-          'line1' => $address->getAddressLine1(),
-          'line2' => $address->getAddressLine2(),
-          'city' => $address->getLocality(),
-          'region' => $address->getAdministrativeArea(),
-          'country' => $address->getCountryCode(),
-          'postalCode' => $address->getPostalCode(),
+        [
+          'AddressCode' => '1',
+          'Line1' => $address->getAddressLine1(),
+          'Line2' => $address->getAddressLine2(),
+          'City' => $address->getLocality(),
+          'Region' => $address->getAdministrativeArea(),
+          'Country' => $address->getCountryCode(),
+          'PostalCode' => $address->getPostalCode(),
         ],
       ];
     }
@@ -93,19 +94,27 @@ class Avatax implements OrderProcessorInterface {
     $request_body['addresses'] = $addresses;
 
     foreach ($order->getItems() as $item) {
-      $request_body['lines'][] = [
-        'number' => $item->id(),
-        'quantity' => $item->getQuantity(),
-        'amount' => $item->getTotalPrice()->getNumber(),
-        'taxCode' => $this->chainTaxCodeResolver->resolve($item->getPurchasedEntity()),
+      $request_body['Lines'][] = [
+        'LineNo' => $item->id(),
+        'Qty' => $item->getQuantity(),
+        'Amount' => $item->getAdjustedPrice()->getNumber(),
+        'OriginCode' => '1',
+        'DestinationCode' => $this->chainTaxCodeResolver->resolve($item->getPurchasedEntity()),
       ];
     }
+
+    $order_discount = new Price('0.00', $order->getTotalPrice()->getCurrencyCode());
+    foreach ($order->getAdjustments() as $adjustment) {
+      $order_discount = $order_discount->add($adjustment->getAmount());
+    }
+    $request_body['Discount'] = abs($order_discount->getNumber());
+    $request_body['discount'] = abs($order_discount->getNumber());
 
     $this->moduleHandler->alter('commerce_avatax_order_request', $request_body, $order);
 
     // @todo check mode, this is hardcoded sandbox.
     try {
-      $response = $this->client->post('https://sandbox-rest.avatax.com/api/v2/transactions/create', [
+      $response = $this->client->post('https://development.avalara.net/1.0/tax/get', [
         'json' => $request_body,
       ]);
 
@@ -113,7 +122,7 @@ class Avatax implements OrderProcessorInterface {
       $order->addAdjustment(new Adjustment([
         'type' => 'sales_tax',
         'label' => 'Sales tax',
-        'amount' => new Price((string) $body['totalTax'], $order->getTotalPrice()->getCurrencyCode())
+        'amount' => new Price((string) $body['TotalTax'], $order->getTotalPrice()->getCurrencyCode())
       ]));
     }
     catch (ClientException $e) {
