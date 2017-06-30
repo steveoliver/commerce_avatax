@@ -171,7 +171,7 @@ class Avatax implements OrderProcessorInterface {
             'type' => 'sales_tax',
             'label' => 'Sales tax',
             'amount' => new Price((string) $adjustments[$item->id()], $currency_code),
-            'source_id' => $order->id(),
+            'source_id' => 'avatax',
           ]));
         }
       }
