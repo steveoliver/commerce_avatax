@@ -138,12 +138,18 @@ class Avatax implements OrderProcessorInterface {
     $request_body['addresses'] = $addresses;
 
     foreach ($order->getItems() as $item) {
-      $request_body['lines'][] = [
+      $line_item = [
         'number' => $item->id(),
         'quantity' => $item->getQuantity(),
         'amount' => $item->getUnitPrice()->getNumber(),
-        'taxCode' => $this->chainTaxCodeResolver->resolve($item->getPurchasedEntity()),
       ];
+      if ($item->getPurchasedEntity()) {
+        $line_item['taxCode'] = $this->chainTaxCodeResolver->resolve($item->getPurchasedEntity());
+      }
+      else {
+        $line_item['taxCode'] = $this->config->get('tax_code');
+      }
+      $request_body['lines'][] = $line_item;
     }
 
     $this->moduleHandler->alter('commerce_avatax_order_request', $request_body, $order);
