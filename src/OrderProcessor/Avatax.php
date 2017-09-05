@@ -141,7 +141,7 @@ class Avatax implements OrderProcessorInterface {
       $line_item = [
         'number' => $item->id(),
         'quantity' => $item->getQuantity(),
-        'amount' => $item->getUnitPrice()->getNumber(),
+        'amount' => $item->getAdjustedUnitPrice()->getNumber(),
       ];
       if ($item->getPurchasedEntity()) {
         $line_item['taxCode'] = $this->chainTaxCodeResolver->resolve($item->getPurchasedEntity());
